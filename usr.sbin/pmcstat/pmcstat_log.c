@@ -367,6 +367,53 @@ pmcstat_pmcindex_to_pmcr(int pmcin)
 	return NULL;
 }
 
+static int
+pmcstat_print_multipart(struct pmclog_ev_callchain *cc)
+{
+	int i;
+	uint8_t *hdr = (uint8_t *)&cc->pl_pc[0];
+	int offset = PMC_MULTIPART_HEADER_LENGTH / sizeof(uintptr_t);
+
+	for (i = 0; i < PMC_MULTIPART_HEADER_ENTRIES; i++) {
+		uint8_t type = hdr[2 * i];
+		uint8_t len = hdr[2 * i + 1];
+
+		if (type == PMC_CC_MULTIPART_NONE) {
+			break;
+		} else if (type == PMC_CC_MULTIPART_CALLCHAIN) {
+			return offset;
+		} else if (type == PMC_CC_MULTIPART_IBS_FETCH) {
+			uintptr_t ctl = cc->pl_pc[offset + MULTIPART_IDX_FETCH_CTL];
+			PMCSTAT_PRINT_ENTRY("IBS", "Latency %lu",
+			    IBS_FETCH_CTL_TO_LAT(ctl));
+			PMCSTAT_PRINT_ENTRY("IBS", "Address %lx",
+			    cc->pl_pc[offset + MULTIPART_IDX_FETCH_LINADDR]);
+			if ((ctl & IBS_FETCH_CTL_PHYSADDRVALID) != 0) {
+				PMCSTAT_PRINT_ENTRY("IBS", "Physical Address %lx",
+				    cc->pl_pc[offset + MULTIPART_IDX_FETCH_PHYSADDR]);
+			}
+		} else if (type == PMC_CC_MULTIPART_IBS_OP) {
+			uintptr_t data3 = cc->pl_pc[offset + MULTIPART_IDX_OP_DATA3];
+			PMCSTAT_PRINT_ENTRY("IBS", "RIP %lx", 
+			    cc->pl_pc[offset + MULTIPART_IDX_OP_RIP]);
+			if ((data3 & IBS_OP_DATA3_DCLINADDRVALID) != 0) {
+				PMCSTAT_PRINT_ENTRY("IBS", "Address %lx", 
+				    cc->pl_pc[offset + MULTIPART_IDX_OP_DC_LINADDR]);
+			}
+			if ((data3 & IBS_OP_DATA3_DCPHYADDRVALID) != 0) {
+				PMCSTAT_PRINT_ENTRY("IBS", "Physical Address %lx", 
+				    cc->pl_pc[offset + MULTIPART_IDX_OP_DC_PHYSADDR]);
+			}
+		} else {
+			PMCSTAT_PRINT_ENTRY("unsupported multipart type!",);
+		}
+
+		offset += len;
+	}
+
+	return offset;
+}
+
 /*
  * Print log entries as text.
  */
@@ -388,7 +435,11 @@ pmcstat_print_log(void)
 				pl_cpuflags), ev.pl_u.pl_cc.pl_npc,
 			    PMC_CALLCHAIN_CPUFLAGS_TO_USERMODE(ev.pl_u.pl_cc.\
 			        pl_cpuflags) ? 'u' : 's');
-			for (npc = 0; npc < ev.pl_u.pl_cc.pl_npc; npc++)
+			if ((ev.pl_u.pl_cc.pl_cpuflags & PMC_CC_F_MULTIPART) != 0)
+				npc = pmcstat_print_multipart(&ev.pl_u.pl_cc);
+			else
+				npc = 0;
+			for (; npc < ev.pl_u.pl_cc.pl_npc; npc++)
 				PMCSTAT_PRINT_ENTRY("...", "%p",
 				    (void *) ev.pl_u.pl_cc.pl_pc[npc]);
 			break;

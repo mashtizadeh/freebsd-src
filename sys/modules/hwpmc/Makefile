@@ -16,7 +16,7 @@ SRCS.DEV_ACPI+=	hwpmc_dmc620.c pmu_dmc620.c
 .endif
 
 .if ${MACHINE_CPUARCH} == "amd64"
-SRCS+=	hwpmc_amd.c hwpmc_core.c hwpmc_intel.c hwpmc_tsc.c
+SRCS+=	hwpmc_amd.c hwpmc_core.c hwpmc_ibs.c hwpmc_intel.c hwpmc_tsc.c
 SRCS+=	hwpmc_x86.c hwpmc_uncore.c
 .endif
 

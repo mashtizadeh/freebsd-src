@@ -1,7 +1,7 @@
 /*-
  * SPDX-License-Identifier: BSD-2-Clause
  *
- * Copyright (c) 2018, Matthew Macy
+ * Copyright (c) 2026, Ali Mashtizadeh
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -25,39 +25,45 @@
  * SUCH DAMAGE.
  *
  */
-#ifndef _CMD_PMC_H_
-#define _CMD_PMC_H_
 
-#define	DEFAULT_DISPLAY_HEIGHT		256	/* file virtual height */
-#define	DEFAULT_DISPLAY_WIDTH		1024	/* file virtual width */
+void setup_screen(bool interactive);
 
-extern int pmc_displayheight;
-extern int pmc_displaywidth;
-extern int pmc_kq;
-extern struct pmcstat_args pmc_args;
+/* Formatting */
+std::string format_siunit(uint64_t count);
+std::string format_sample(uint64_t count, uint64_t total);
 
-typedef int (*cmd_disp_t)(int, char **);
+/* Printing */
+void display_header(const std::string &msg);
 
-#if defined(__cplusplus)
-extern "C" {
-#endif
-	int	cmd_pmc_ibs(int, char **);
-	int	cmd_pmc_info(int, char **);
-	int	cmd_pmc_filter(int, char **);
-	int	cmd_pmc_function(int, char **);
-	int	cmd_pmc_list_events(int, char **);
-	int	cmd_pmc_program(int, char **);
-	int	cmd_pmc_stat(int, char **);
-	int	cmd_pmc_stat_system(int, char **);
-	int	cmd_pmc_summary(int, char **);
-	int	cmd_pmc_system(int, char **);
-#if defined(__cplusplus)
+class table
+{
+public:
+	table() { }
+	~table() { }
+	void addcolumn(const std::string &c, bool alignleft = false);
+	void addrow(std::vector<std::string> &r);
+	void print();
+private:
+	std::vector<std::string> cols;
+	std::vector<bool> align;
+	std::vector<std::vector<std::string>> rows;
 };
-#endif
-int	pmc_util_get_pid(struct pmcstat_args *);
-void	pmc_util_start_pmcs(struct pmcstat_args *);
-void	pmc_util_cleanup(struct pmcstat_args *);
-void	pmc_util_shutdown_logging(struct pmcstat_args *args);
-void	pmc_util_kill_process(struct pmcstat_args *args);
 
-#endif
+class histogram
+{
+public:
+	histogram() { }
+	~histogram() { }
+	void setxlabel(const std::string &lbl);
+	void setylabel(const std::string &lbl);
+	void addsample(int s);
+	int min();
+	int max();
+	int average();
+	void print();
+private:
+	std::string xlabel;
+	std::string ylabel;
+	std::unordered_map<int, uint64_t> samples;
+};
+

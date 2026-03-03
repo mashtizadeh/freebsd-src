@@ -57,27 +57,40 @@ struct pmcstat_process_hash_list pmcstat_process_hash[PMCSTAT_NHASH];
 struct cmd_handler {
 	const char *ch_name;
 	cmd_disp_t ch_fn;
+	const char *ch_desc;
 };
 
 static struct cmd_handler disp_table[] = {
-	{"stat", cmd_pmc_stat},
-	{"stat-system", cmd_pmc_stat_system},
-	{"list-events", cmd_pmc_list_events},
-	{"filter", cmd_pmc_filter},
-	{"summary", cmd_pmc_summary},
-	{NULL, NULL}
+	{ "ibs", cmd_pmc_ibs, "Breakdown IBS statistics" },
+	{ "info", cmd_pmc_info, "Display high level information about a log" },
+	{ "filter", cmd_pmc_filter, "Filter records by lwp, pid, or event" },
+	{ "function", cmd_pmc_function, "Show a function view" },
+	{ "list-events", cmd_pmc_list_events, "List available PMC events" },
+	{ "program", cmd_pmc_program, "Show a summary of all functions" },
+	{ "stat", cmd_pmc_stat, "Run a program and print stats" },
+	{ "stat-system", cmd_pmc_stat_system, "Run a program and print system-wide stats" },
+	{ "summary", cmd_pmc_summary, NULL },
+	{ "system", cmd_pmc_system, "Show a summary of all processes" },
+	{ NULL, NULL, NULL }
 };
 
-static void __dead2
+static void
 usage(void)
 {
-	errx(EX_USAGE,
-	    "\t pmc management utility\n"
-	    "\t stat <program> run program and print stats\n"
-		 "\t stat-system <program> run program and print system wide stats for duration of execution\n"
-		 "\t list-events list PMC events available on host\n"
-		 "\t filter filter records by lwp, pid, or event\n"
-	    );
+	int i;
+
+	fprintf(stderr, "usage: pmc <COMMAND> [OPTIONS] ...\n");
+	fprintf(stderr, "PMC tool\n\n");
+
+	fprintf(stderr, "Commands:\n");
+	for (i = 0; disp_table[i].ch_name != NULL; i++) {
+		// Hide stuff we plan to deprecate
+		if (disp_table[i].ch_desc)
+			fprintf(stderr, "    %-12s    %s\n",
+			    disp_table[i].ch_name, disp_table[i].ch_desc);
+	}
+
+	exit(EX_USAGE);
 }
 
 static cmd_disp_t

@@ -443,6 +443,7 @@ amd_release_pmc(int cpu, int ri, struct pmc *pmc __unused)
 static int
 amd_start_pmc(int cpu __diagused, int ri, struct pmc *pm)
 {
+	int status;
 	const struct amd_descr *pd;
 	uint64_t config;
 
@@ -469,8 +470,9 @@ amd_start_pmc(int cpu __diagused, int ri, struct pmc *pm)
 
 	PMCDBG1(MDP, STA, 2, "amd-start config=0x%x", config);
 
-	wrmsr(pd->pm_evsel, config);
-	return (0);
+	status = wrmsr_safe(pd->pm_evsel, config);
+
+	return (status);
 }
 
 /*
@@ -479,6 +481,7 @@ amd_start_pmc(int cpu __diagused, int ri, struct pmc *pm)
 static int
 amd_stop_pmc(int cpu __diagused, int ri, struct pmc *pm)
 {
+	int status;
 	const struct amd_descr *pd;
 	uint64_t config;
 	int i;
@@ -498,7 +501,7 @@ amd_stop_pmc(int cpu __diagused, int ri, struct pmc *pm)
 
 	/* turn off the PMC ENABLE bit */
 	config = pm->pm_md.pm_amd.pm_amd_evsel & ~AMD_PMC_ENABLE;
-	wrmsr(pd->pm_evsel, config);
+	status = wrmsr_safe(pd->pm_evsel, config);
 
 	/*
 	 * Due to NMI latency on newer AMD processors
@@ -514,7 +517,7 @@ amd_stop_pmc(int cpu __diagused, int ri, struct pmc *pm)
 		DELAY(1);
 	}
 
-	return (0);
+	return (status);
 }
 
 /*

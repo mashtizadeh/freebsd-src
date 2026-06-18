@@ -57,6 +57,8 @@
 #include <dev/vmm/vmm_mem.h>
 #include <dev/vmm/vmm_vm.h>
 
+#include <dev/hwpmc/hwpmc_amd.h>
+
 #include "vmm_lapic.h"
 #include "vmm_stat.h"
 #include "vmm_ioport.h"
@@ -87,9 +89,12 @@ SYSCTL_NODE(_hw_vmm, OID_AUTO, svm, CTLFLAG_RW | CTLFLAG_MPSAFE, NULL,
 #define AMD_CPUID_SVM_VMCB_CLEAN	BIT(5)  /* VMCB state caching */
 #define AMD_CPUID_SVM_FLUSH_BY_ASID	BIT(6)  /* Flush by ASID */
 #define AMD_CPUID_SVM_DECODE_ASSIST	BIT(7)  /* Decode assist */
+#define AMD_CPUID_SVM_PERFCTRVIRT	BIT(8)  /* Performance counter virtualization */
 #define AMD_CPUID_SVM_PAUSE_INC		BIT(10) /* Pause intercept filter. */
 #define AMD_CPUID_SVM_PAUSE_FTH		BIT(12) /* Pause filter threshold */
 #define	AMD_CPUID_SVM_AVIC		BIT(13)	/* AVIC present */
+#define AMD_CPUID_SVM_NMIVIRT		BIT(25) /* NMI virtualization */
+#define AMD_CPUID_SVM_IBSVIRT		BIT(26) /* IBS virtualization */
 
 #define	VMCB_CACHE_DEFAULT	(VMCB_CACHE_ASID 	|	\
 				VMCB_CACHE_IOPM		|	\
@@ -562,6 +567,13 @@ vmcb_init(struct svm_softc *sc, struct svm_vcpu *vcpu, uint64_t iopm_base_pa,
 	 */
 	ctrl->v_intr_masking = 1;
 
+	/*
+	 * Section 15.21.10, NMI Virtualization
+	 */
+	if (!(svm_feature & AMD_CPUID_SVM_NMIVIRT)) {
+		ctrl->v_nmi_enable = 1;
+	}
+
 	/* Enable Last Branch Record aka LBR for debugging */
 	ctrl->lbr_virt_en = 1;
 	state->dbgctl = BIT(0);
@@ -970,7 +982,10 @@ svm_eventinject(struct svm_vcpu *vcpu, int intr_type, int vector,
 
 	switch (intr_type) {
 	case VMCB_EVENTINJ_TYPE_INTR:
+		break;
 	case VMCB_EVENTINJ_TYPE_NMI:
+		ctrl->v_nmi = 1;
+		break;
 	case VMCB_EVENTINJ_TYPE_INTn:
 		break;
 	case VMCB_EVENTINJ_TYPE_EXCEPTION:
@@ -1128,9 +1143,11 @@ static void
 enable_nmi_blocking(struct svm_vcpu *vcpu)
 {
 
-	KASSERT(!nmi_blocked(vcpu), ("vNMI already blocked"));
-	SVM_CTR0(vcpu, "vNMI blocking enabled");
-	svm_enable_intercept(vcpu, VMCB_CTRL1_INTCPT, VMCB_INTCPT_IRET);
+	if (!(svm_feature & AMD_CPUID_SVM_NMIVIRT)) {
+		KASSERT(!nmi_blocked(vcpu), ("vNMI already blocked"));
+		SVM_CTR0(vcpu, "vNMI blocking enabled");
+		svm_enable_intercept(vcpu, VMCB_CTRL1_INTCPT, VMCB_INTCPT_IRET);
+	}
 }
 
 static void
@@ -1138,27 +1155,30 @@ clear_nmi_blocking(struct svm_vcpu *vcpu)
 {
 	int error __diagused;
 
-	KASSERT(nmi_blocked(vcpu), ("vNMI already unblocked"));
-	SVM_CTR0(vcpu, "vNMI blocking cleared");
-	/*
-	 * When the IRET intercept is cleared the vcpu will attempt to execute
-	 * the "iret" when it runs next. However, it is possible to inject
-	 * another NMI into the vcpu before the "iret" has actually executed.
-	 *
-	 * For e.g. if the "iret" encounters a #NPF when accessing the stack
-	 * it will trap back into the hypervisor. If an NMI is pending for
-	 * the vcpu it will be injected into the guest.
-	 *
-	 * XXX this needs to be fixed
-	 */
-	svm_disable_intercept(vcpu, VMCB_CTRL1_INTCPT, VMCB_INTCPT_IRET);
+	if (!(svm_feature & AMD_CPUID_SVM_NMIVIRT)) {
+		KASSERT(nmi_blocked(vcpu), ("vNMI already unblocked"));
+		SVM_CTR0(vcpu, "vNMI blocking cleared");
+		/*
+		 * When the IRET intercept is cleared the vcpu will attempt to 
+		 * execute the "iret" when it runs next. However, it is 
+		 * possible to inject another NMI into the vcpu before the 
+		 * "iret" has actually executed.
+		 *
+		 * For e.g. if the "iret" encounters a #NPF when accessing the 
+		 * stack it will trap back into the hypervisor. If an NMI is 
+		 * pending for the vcpu it will be injected into the guest.
+		 *
+		 * XXX this needs to be fixed
+		 */
+		svm_disable_intercept(vcpu, VMCB_CTRL1_INTCPT, VMCB_INTCPT_IRET);
 
-	/*
-	 * Set 'intr_shadow' to prevent an NMI from being injected on the
-	 * immediate VMRUN.
-	 */
-	error = svm_modify_intr_shadow(vcpu, 1);
-	KASSERT(!error, ("%s: error %d setting intr_shadow", __func__, error));
+		/*
+		 * Set 'intr_shadow' to prevent an NMI from being injected on 
+		 * the immediate VMRUN.
+		 */
+		error = svm_modify_intr_shadow(vcpu, 1);
+		KASSERT(!error, ("%s: error %d setting intr_shadow", __func__, error));
+	}
 }
 
 #define	EFER_MBZ_BITS	0xFFFFFFFFFFFF0200UL
@@ -2448,6 +2468,8 @@ static int
 svm_setcap(void *vcpui, int type, int val)
 {
 	struct svm_vcpu *vcpu;
+	struct svm_softc *svm_sc;
+	struct vmcb_ctrl *ctrl;
 	struct vlapic *vlapic;
 	int error;
 
@@ -2523,6 +2545,34 @@ svm_setcap(void *vcpui, int type, int val)
 		    val);
 		break;
 	}
+	case VM_CAP_VPMC:
+		vcpu->caps &= ~(1 << VM_CAP_VPMC);
+		vcpu->caps |= (val << VM_CAP_VPMC);
+		ctrl = svm_get_vmcb_ctrl(vcpu);
+		ctrl->v_pmc_en = val;
+		svm_sc = vcpu->sc;
+		svm_msr_rw_ok(svm_sc->msr_bitmap, AMD_PMC_EVSEL_0);
+		svm_msr_rw_ok(svm_sc->msr_bitmap, AMD_PMC_EVSEL_1);
+		svm_msr_rw_ok(svm_sc->msr_bitmap, AMD_PMC_EVSEL_2);
+		svm_msr_rw_ok(svm_sc->msr_bitmap, AMD_PMC_EVSEL_3);
+		svm_msr_rw_ok(svm_sc->msr_bitmap, AMD_PMC_PERFCTR_0);
+		svm_msr_rw_ok(svm_sc->msr_bitmap, AMD_PMC_PERFCTR_1);
+		svm_msr_rw_ok(svm_sc->msr_bitmap, AMD_PMC_PERFCTR_2);
+		svm_msr_rw_ok(svm_sc->msr_bitmap, AMD_PMC_PERFCTR_3);
+		for (int i = 0; i < AMD_PMC_CORE_DEFAULT; i++) {
+			svm_msr_rw_ok(svm_sc->msr_bitmap, AMD_PMC_CORE_BASE + 2 * i);
+			svm_msr_rw_ok(svm_sc->msr_bitmap, AMD_PMC_CORE_BASE + 2 * i + 1);
+		}
+		break;
+	case VM_CAP_VIBS:
+		vcpu->caps &= ~(1 << VM_CAP_VIBS);
+		vcpu->caps |= (val << VM_CAP_VIBS);
+		ctrl = svm_get_vmcb_ctrl(vcpu);
+		ctrl->v_ibs_en = val;
+		svm_sc = vcpu->sc;
+		for (int i = 0xC0011030; i <= 0xC001103C; i++)
+			svm_msr_rw_ok(svm_sc->msr_bitmap, AMD_PMC_CORE_BASE + 2 * i);
+		break;
 	default:
 		error = ENOENT;
 		break;
@@ -2564,6 +2614,12 @@ svm_getcap(void *vcpui, int type, int *retval)
 		break;
 	case VM_CAP_MASK_HWINTR:
 		*retval = !!(vcpu->caps & (1 << VM_CAP_MASK_HWINTR));
+		break;
+	case VM_CAP_VPMC:
+		*retval = !!(vcpu->caps & (1 << VM_CAP_VPMC));
+		break;
+	case VM_CAP_VIBS:
+		*retval = !!(vcpu->caps & (1 << VM_CAP_VIBS));
 		break;
 	default:
 		error = ENOENT;

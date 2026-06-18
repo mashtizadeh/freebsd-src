@@ -268,12 +268,17 @@ struct vmcb_ctrl {
 	uint8_t  pad2[3];	/* 0x5D-0x5F: Reserved. */
 	uint8_t	 v_tpr;		/* 0x60: V_TPR, guest CR8 */
 	uint8_t	 v_irq:1;	/* Is virtual interrupt pending? */
-	uint8_t	:7; 		/* Padding */
+	uint8_t	 vgif:1;	/* Virtual interrupts are masked. */
+	uint8_t	 v_nmi:1;	/* Virtual NMI pending? */
+	uint8_t	 v_nmi_mask:1;	/* Virtual NMI is masked. */
+	uint8_t	:4; 		/* Padding */
 	uint8_t v_intr_prio:4;	/* 0x62: Priority for virtual interrupt. */
 	uint8_t v_ign_tpr:1;
 	uint8_t :3;
 	uint8_t	v_intr_masking:1; /* Guest and host sharing of RFLAGS. */
-	uint8_t	:7;
+	uint8_t	v_vgif_enable:1; /* VGIF enabled for guest. */
+	uint8_t v_nmi_enable:1;	/* NMI Virtualization Enable. */
+	uint8_t	:5;
 	uint8_t	v_intr_vector;	/* 0x64: Vector for virtual interrupt. */
 	uint8_t pad3[3];	/* 0x65-0x67 Reserved. */
 	uint64_t intr_shadow:1; /* 0x68: Interrupt shadow, section15.2.1 APM2 */
@@ -287,8 +292,11 @@ struct vmcb_ctrl {
 	uint8_t  pad4[0x10];	/* 0x98-0xA7 reserved. */
 	uint64_t eventinj;	/* 0xA8, Event injection. */
 	uint64_t n_cr3;		/* B0, Nested page table. */
-	uint64_t lbr_virt_en:1;	/* Enable LBR virtualization. */
-	uint64_t :63;
+	uint64_t lbr_virt_en:1;	/* 0xB8: Enable LBR virtualization. */
+	uint64_t v_vmsave_en:1; /* Enable VMSAVE/VMLOAD virtualization. */
+	uint64_t v_ibs_en:1;	/* Enable IBS virtualization. */
+	uint64_t v_pmc_en:1;	/* Enable PMC virtualization. */
+	uint64_t :60;
 	uint32_t vmcb_clean;	/* 0xC0: VMCB clean bits for caching */
 	uint32_t :32;		/* 0xC4: Reserved */
 	uint64_t nrip;		/* 0xC8: Guest next nRIP. */
@@ -313,7 +321,20 @@ struct vmcb_state {
 	uint8_t	 cpl;
 	uint8_t  pad2[4];
 	uint64_t efer;
-	uint8_t	 pad3[0x70];		/* Reserved: 0xd8-0x147 */
+	uint8_t	 pad3[0x8];		/* Reserved: 0xd8-0xdf */
+	uint64_t perf_ctl0;
+	uint64_t perf_ctr0;
+	uint64_t perf_ctl1;
+	uint64_t perf_ctr1;
+	uint64_t perf_ctl2;
+	uint64_t perf_ctr2;
+	uint64_t perf_ctl3;
+	uint64_t perf_ctr3;
+	uint64_t perf_ctl4;
+	uint64_t perf_ctr4;
+	uint64_t perf_ctl5;
+	uint64_t perf_ctr5;
+	uint64_t pad4;
 	uint64_t cr4;
 	uint64_t cr3;			/* Guest CR3 */
 	uint64_t cr0;
@@ -321,9 +342,12 @@ struct vmcb_state {
 	uint64_t dr6;
 	uint64_t rflags;
 	uint64_t rip;
-	uint8_t	 pad4[0x58]; 		/* Reserved: 0x180-0x1D7 */
+	uint8_t	 pad5[0x40]; 		/* Reserved: 0x180-0x1BF */
+	uint64_t instr_retired_ctr;
+	uint64_t perf_ctr_global_sts;
+	uint64_t perf_ctr_global_ctl;
 	uint64_t rsp;
-	uint8_t	 pad5[0x18]; 		/* Reserved 0x1E0-0x1F7 */
+	uint8_t	 pad6[0x18]; 		/* Reserved 0x1E0-0x1F7 */
 	uint64_t rax;
 	uint64_t star;
 	uint64_t lstar;
@@ -334,14 +358,30 @@ struct vmcb_state {
 	uint64_t sysenter_esp;
 	uint64_t sysenter_eip;
 	uint64_t cr2;
-	uint8_t	 pad6[0x20];
+	uint8_t	 pad7[0x20];
 	uint64_t g_pat;
 	uint64_t dbgctl;
 	uint64_t br_from;
 	uint64_t br_to;
 	uint64_t int_from;
 	uint64_t int_to;
-	uint8_t	 pad7[0x968];		/* Reserved up to end of VMCB */
+	uint64_t dbgextnctl;
+	uint8_t pad8[0x40];		/* Reserved: 0x2A0-0x2DF */
+	uint64_t spec_ctrl;
+	uint8_t pad9[0x388];		/* Reserved: 0x2E8-0x66F */
+	uint64_t lbr_stack[0x20];	/* LBR Stack From/To 0x670-0x76F */
+	uint64_t lbr_select;
+	uint64_t ibs_fetch_ctl;
+	uint64_t ibs_fetch_linaddr;
+	uint64_t ibs_op_ctl;
+	uint64_t ibs_op_rip;
+	uint64_t ibs_op_data;
+	uint64_t ibs_op_data2;
+	uint64_t ibs_op_data3;
+	uint64_t ibs_op_linaddr;
+	uint64_t bp_ibstgt_rip;
+	uint64_t ic_ibs_extd_ctl;
+	uint8_t	 pad10[0x438];		/* Reserved up to end of VMCB */
 } __attribute__ ((__packed__));
 CTASSERT(sizeof(struct vmcb_state) == 0xC00);
 

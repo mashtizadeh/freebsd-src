@@ -2394,7 +2394,7 @@ print_svm_info(void)
 	       "\006VmcbClean"		/* VMCB clean bits */
 	       "\007FlushByAsid"	/* Flush by ASID */
 	       "\010DecodeAssist"	/* Decode assist */
-	       "\011<b8>"
+	       "\011PerfCtrVirt"	/* Performance counter virtualization */
 	       "\012<b9>"
 	       "\013PauseFilter"	/* PAUSE intercept filter */
 	       "\014EncryptedMcodePatch"
@@ -2411,8 +2411,8 @@ print_svm_info(void)
 	       "\027<b22>"
 	       "\030<b23>"
 	       "\031<b24>"
-	       "\032<b25>"
-	       "\033<b26>"
+	       "\032NmiVirt"		/* NMI virtualization */
+	       "\033IbsVirt"		/* IBS virtualization */
 	       "\034<b27>"
 	       "\035<b28>"
 	       "\036<b29>"

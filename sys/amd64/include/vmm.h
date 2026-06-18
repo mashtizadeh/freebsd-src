@@ -383,6 +383,8 @@ enum vm_cap_type {
 	VM_CAP_IPI_EXIT,
 	VM_CAP_MASK_HWINTR,
 	VM_CAP_RFLAGS_TF,
+	VM_CAP_VPMC,
+	VM_CAP_VIBS,
 	VM_CAP_MAX
 };
 

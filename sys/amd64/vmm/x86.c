@@ -81,8 +81,8 @@ x86_emulate_cpuid(struct vcpu *vcpu, uint64_t *rax, uint64_t *rbx,
 	int vcpu_id = vcpu_vcpuid(vcpu);
 	const struct xsave_limits *limits;
 	uint64_t cr4;
-	int error, enable_invpcid, enable_rdpid, enable_rdtscp, level,
-	    width, x2apic_id;
+	int error, enable_invpcid, enable_rdpid, enable_rdtscp,
+	    enable_vibs, enable_vpmc, level, width, x2apic_id;
 	unsigned int func, regs[4], logical_cpus, param;
 	enum x2apic_state x2apic_state;
 	uint16_t cores, maxcpus, sockets, threads;
@@ -170,14 +170,20 @@ x86_emulate_cpuid(struct vcpu *vcpu, uint64_t *rax, uint64_t *rbx,
 			 * Don't advertise extended performance counter MSRs
 			 * to the guest.
 			 */
-			regs[2] &= ~AMDID2_PCXC;
+			error = vm_get_capability(vcpu,
+			    VM_CAP_VPMC, &enable_vpmc);
+			if (error != 0 || !enable_vpmc)
+				regs[2] &= ~AMDID2_PCXC;
 			regs[2] &= ~AMDID2_PNXC;
 			regs[2] &= ~AMDID2_PTSCEL2I;
 
 			/*
 			 * Don't advertise Instruction Based Sampling feature.
 			 */
-			regs[2] &= ~AMDID2_IBS;
+			error = vm_get_capability(vcpu,
+			    VM_CAP_VIBS, &enable_vibs);
+			if (error != 0 || !enable_vibs)
+				regs[2] &= ~AMDID2_IBS;
 
 			/* NodeID MSR not available */
 			regs[2] &= ~AMDID2_NODE_ID;
@@ -226,6 +232,14 @@ x86_emulate_cpuid(struct vcpu *vcpu, uint64_t *rax, uint64_t *rbx,
 			 */
 			if (tsc_is_invariant && smp_tsc)
 				regs[3] |= AMDPM_TSC_INVARIANT;
+			break;
+
+		case CPUID_8000_001B:
+			do_cpuid(1, regs);
+			error = vm_get_capability(vcpu,
+			    VM_CAP_VIBS, &enable_vibs);
+			if (error != 0 || !enable_vibs)
+				regs[0] = 0;
 			break;
 
 		case CPUID_8000_001D:
@@ -296,6 +310,35 @@ x86_emulate_cpuid(struct vcpu *vcpu, uint64_t *rax, uint64_t *rbx,
 			 * XXX Bhyve topology cannot yet represent >1 node per
 			 * processor.
 			 */
+			regs[2] = 0;
+			regs[3] = 0;
+			break;
+
+		case CPUID_8000_0022:
+			error = vm_get_capability(vcpu,
+			    VM_CAP_VPMC, &enable_vpmc);
+			if (error == 0 && enable_vpmc) {
+				/*
+				 * Enable PMCs but don't report LBR as that's 
+				 * only used internally for debugging right 
+				 * now.
+				 */
+				regs[0] = 1;
+
+				/*
+				 * Again we calim no UMCs, no NBs (also bit 
+				 * above is disabled), and no LBR stack size 
+				 * since it's only used for Bhyve debugging 
+				 * right now.  Only report six core counters if 
+				 * VM_CAP_VPMC is enabled.
+				 */
+				regs[1] = 0x6;
+			} else {
+				regs[0] = 0;
+				regs[1] = 0;
+			}
+
+			/* Disable UMC counters */
 			regs[2] = 0;
 			regs[3] = 0;
 			break;

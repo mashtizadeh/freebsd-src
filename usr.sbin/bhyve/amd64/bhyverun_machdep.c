@@ -312,6 +312,23 @@ bhyve_init_vcpu(struct vcpu *vcpu)
 
 	err = vm_set_capability(vcpu, VM_CAP_IPI_EXIT, 1);
 	assert(err == 0);
+
+	// XXX: We should warn if the hwpmc module is loaded
+	if (get_config_bool_default("x86.vpmc", false)) {
+		err = vm_set_capability(vcpu, VM_CAP_VPMC, 1);
+		if (err) {
+			EPRINTLN("Unable to enable vPMC (%d)", err);
+			exit(BHYVE_EXIT_ERROR);
+		}
+	}
+
+	if (get_config_bool_default("x86.vibs", false)) {
+		err = vm_set_capability(vcpu, VM_CAP_VIBS, 1);
+		if (err) {
+			EPRINTLN("Unable to enable vIBS (%d)", err);
+			exit(BHYVE_EXIT_ERROR);
+		}
+	}
 }
 
 void

@@ -1484,10 +1484,10 @@ write_done:
 	return (rtvals[0]);
 }
 
-int
+uint64_t
 vnode_pager_putpages_ioflags(int pager_flags)
 {
-	int ioflags;
+	uint64_t ioflags;
 
 	/*
 	 * Pageouts are already clustered, use IO_ASYNC to force a

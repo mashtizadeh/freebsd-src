@@ -123,7 +123,7 @@ SDT_PROBE_DEFINE2(fusefs, , io, read_bio_backend_feed, "int", "struct buf*");
 SDT_PROBE_DEFINE4(fusefs, , io, read_bio_backend_end, "int", "ssize_t", "int",
 		"struct buf*");
 int
-fuse_read_biobackend(struct vnode *vp, struct uio *uio, int ioflag,
+fuse_read_biobackend(struct vnode *vp, struct uio *uio, uint64_t ioflag,
     struct ucred *cred, struct fuse_filehandle *fufh, pid_t pid)
 {
 	struct buf *bp;
@@ -474,7 +474,7 @@ SDT_PROBE_DEFINE2(fusefs, , io, write_biobackend_issue, "int", "struct buf*");
 
 int
 fuse_write_biobackend(struct vnode *vp, struct uio *uio,
-    struct ucred *cred, struct fuse_filehandle *fufh, int ioflag, pid_t pid)
+    struct ucred *cred, struct fuse_filehandle *fufh, uint64_t ioflag, pid_t pid)
 {
 	struct fuse_vnode_data *fvdat = VTOFUD(vp);
 	struct buf *bp;

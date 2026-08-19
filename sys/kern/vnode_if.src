@@ -226,7 +226,7 @@ vop_update_atime {
 vop_read {
 	IN struct vnode *vp;
 	INOUT struct uio *uio;
-	IN int ioflag;
+	IN uint64_t ioflag;
 	IN struct ucred *cred;
 };
 
@@ -237,7 +237,7 @@ vop_read {
 vop_read_pgcache {
 	IN struct vnode *vp;
 	INOUT struct uio *uio;
-	IN int ioflag;
+	IN uint64_t ioflag;
 	IN struct ucred *cred;
 };
 
@@ -249,7 +249,7 @@ vop_read_pgcache {
 vop_write {
 	IN struct vnode *vp;
 	INOUT struct uio *uio;
-	IN int ioflag;
+	IN uint64_t ioflag;
 	IN struct ucred *cred;
 };
 
@@ -711,7 +711,7 @@ vop_allocate {
 	IN struct vnode *vp;
 	INOUT off_t *offset;
 	INOUT off_t *len;
-	IN int ioflag;
+	IN uint64_t ioflag;
 	IN struct ucred *cred;
 };
 
@@ -822,7 +822,7 @@ vop_deallocate {
 	INOUT off_t *offset;
 	INOUT off_t *len;
 	IN int flags;
-	IN int ioflag;
+	IN uint64_t ioflag;
 	IN struct ucred *cred;
 };
 

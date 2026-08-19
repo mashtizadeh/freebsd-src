@@ -68,12 +68,12 @@ int fuse_io_flushbuf(struct vnode *vp, int waitfor, struct thread *td);
 int fuse_io_invalbuf(struct vnode *vp, struct thread *td);
 int fuse_read_directbackend(struct vnode *vp, struct uio *uio,
     struct ucred *cred, struct fuse_filehandle *fufh);
-int fuse_read_biobackend(struct vnode *vp, struct uio *uio, int ioflag,
+int fuse_read_biobackend(struct vnode *vp, struct uio *uio, uint64_t ioflag,
     struct ucred *cred, struct fuse_filehandle *fufh, pid_t pid);
 int fuse_write_directbackend(struct vnode *vp, struct uio *uio,
     struct ucred *cred, struct fuse_filehandle *fufh, off_t filesize,
     int ioflag, bool pages);
 int fuse_write_biobackend(struct vnode *vp, struct uio *uio,
-    struct ucred *cred, struct fuse_filehandle *fufh, int ioflag, pid_t pid);
+    struct ucred *cred, struct fuse_filehandle *fufh, uint64_t ioflag, pid_t pid);
 
 #endif /* _FUSE_IO_H_ */

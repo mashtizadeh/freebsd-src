@@ -90,8 +90,8 @@ enum nfsiod_state {
  * Function prototypes.
  */
 int ncl_meta_setsize(struct vnode *, struct thread *, u_quad_t);
-int ncl_bioread(struct vnode *, struct uio *, int, struct ucred *);
-int ncl_biowrite(struct vnode *, struct uio *, int, struct ucred *);
+int ncl_bioread(struct vnode *, struct uio *, uint64_t, struct ucred *);
+int ncl_biowrite(struct vnode *, struct uio *, uint64_t, struct ucred *);
 int ncl_vinvalbuf(struct vnode *, int, struct thread *, int);
 int ncl_asyncio(struct nfsmount *, struct buf *, struct ucred *,
     struct thread *);

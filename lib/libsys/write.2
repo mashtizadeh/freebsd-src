@@ -205,6 +205,9 @@ A signal interrupted the write before it could be completed.
 .It Bq Er EAGAIN
 The file was marked for non-blocking I/O,
 and no data could be written immediately.
+.It Bq Er EAGAIN
+The file was marked for fill-or-kill I/O,
+and the I/O would take too long to complete.
 .It Bq Er EINVAL
 The value
 .Fa nbytes

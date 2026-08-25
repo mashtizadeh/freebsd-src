@@ -262,7 +262,7 @@ The flags for the
 and
 .Dv F_SETFL
 commands are as follows:
-.Bl -tag -width O_NONBLOCKX
+.Bl -tag -width O_FILLORKILL
 .It Dv O_NONBLOCK
 Non-blocking I/O; if no data is available to a
 .Xr read 2
@@ -270,6 +270,11 @@ system call, or if a
 .Xr write 2
 operation would block,
 the read or write call returns -1 with the error
+.Er EAGAIN .
+.It Dv O_FILLORKILL
+Service the I/O in a timely manner; allows the I/O scheduler to determine if 
+the I/O can be serviced within a short period of time,
+otherwise write calls return -1 with the error
 .Er EAGAIN .
 .It Dv O_APPEND
 Force each write to append at the end of file;

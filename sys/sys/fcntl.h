@@ -101,6 +101,7 @@ typedef	__pid_t		pid_t;
 #define	O_CREAT		0x0200		/* create if nonexistent */
 #define	O_TRUNC		0x0400		/* truncate to zero length */
 #define	O_EXCL		0x0800		/* error if already exists */
+#define	O_FILLORKILL	0x1000		/* reserve I/O resource before issue */
 #ifdef _KERNEL
 #define	FHASLOCK	0x4000		/* descriptor holds advisory lock */
 #endif

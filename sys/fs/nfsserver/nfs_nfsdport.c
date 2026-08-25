@@ -445,7 +445,7 @@ static struct nfsheur {
 	struct vnode *nh_vp;	/* vp to match (unreferenced pointer) */
 	off_t nh_nextoff;	/* next offset for sequential detection */
 	int nh_use;		/* use count for selection */
-	int nh_seqcount;	/* heuristic */
+	uint64_t nh_seqcount;	/* heuristic */
 } nfsheur[NUM_HEURISTIC];
 
 /*
@@ -1150,7 +1150,8 @@ nfsvno_read(struct vnode *vp, off_t off, int cnt, struct ucred *cred,
 {
 	struct mbuf *m;
 	struct iovec *iv;
-	int error = 0, len, tlen, ioflag = 0;
+	uint64_t ioflag = 0;
+	int error = 0, len, tlen;
 	struct mbuf *m3;
 	struct uio io, *uiop = &io;
 	struct nfsheur *nh;
@@ -1272,7 +1273,8 @@ nfsvno_write(struct vnode *vp, off_t off, int retlen, int *stable,
     struct mbuf *mp, char *cp, struct ucred *cred, struct thread *p)
 {
 	struct iovec *iv;
-	int cnt, ioflags, error;
+	uint64_t ioflags;
+	int cnt, error;
 	struct uio io, *uiop = &io;
 	struct nfsheur *nh;
 

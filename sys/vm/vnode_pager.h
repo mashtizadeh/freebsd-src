@@ -49,7 +49,7 @@ int vnode_pager_generic_putpages(struct vnode *vp, vm_page_t *m,
     int count, int flags, int *rtvals);
 int vnode_pager_local_getpages(struct vop_getpages_args *ap);
 int vnode_pager_local_getpages_async(struct vop_getpages_async_args *ap);
-int vnode_pager_putpages_ioflags(int pager_flags);
+uint64_t vnode_pager_putpages_ioflags(int pager_flags);
 void vnode_pager_undirty_pages(vm_page_t *ma, int *rtvals, int written,
     off_t eof, int lpos);
 

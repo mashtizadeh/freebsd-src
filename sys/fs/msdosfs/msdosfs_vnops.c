@@ -622,7 +622,7 @@ msdosfs_write(struct vop_write_args *ap)
 	int seqcount;
 	daddr_t bn, lastcn;
 	struct buf *bp;
-	int ioflag = ap->a_ioflag;
+	uint64_t ioflag = ap->a_ioflag;
 	struct uio *uio = ap->a_uio;
 	struct vnode *vp = ap->a_vp;
 	struct vnode *thisvp;

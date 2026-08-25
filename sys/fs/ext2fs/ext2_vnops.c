@@ -2033,7 +2033,7 @@ ext2_read(struct vop_read_args *ap)
 	off_t bytesinfile;
 	long size, xfersize, blkoffset;
 	int error, orig_resid, seqcount;
-	int ioflag;
+	uint64_t ioflag;
 
 	vp = ap->a_vp;
 	uio = ap->a_uio;
@@ -2171,7 +2171,8 @@ ext2_write(struct vop_write_args *ap)
 	struct buf *bp;
 	daddr_t lbn;
 	off_t osize;
-	int blkoffset, error, flags, ioflag, resid, size, seqcount, xfersize;
+	uint64_t ioflag;
+	int blkoffset, error, flags, resid, size, seqcount, xfersize;
 
 	ioflag = ap->a_ioflag;
 	uio = ap->a_uio;

@@ -119,8 +119,8 @@ static vop_unlock_t	ffs_unlock_debug;
 #endif
 static vop_read_t	ffs_read;
 static vop_write_t	ffs_write;
-static int	ffs_extread(struct vnode *vp, struct uio *uio, int ioflag);
-static int	ffs_extwrite(struct vnode *vp, struct uio *uio, int ioflag,
+static int	ffs_extread(struct vnode *vp, struct uio *uio, uint64_t ioflag);
+static int	ffs_extwrite(struct vnode *vp, struct uio *uio, uint64_t ioflag,
 		    struct ucred *cred);
 static vop_strategy_t	ffsext_strategy;
 static vop_closeextattr_t	ffs_closeextattr;
@@ -640,7 +640,7 @@ ffs_read(
 	struct vop_read_args /* {
 		struct vnode *a_vp;
 		struct uio *a_uio;
-		int a_ioflag;
+		uint64_t a_ioflag;
 		struct ucred *a_cred;
 	} */ *ap)
 {
@@ -831,7 +831,7 @@ ffs_write(
 	struct vop_write_args /* {
 		struct vnode *a_vp;
 		struct uio *a_uio;
-		int a_ioflag;
+		uint64_t a_ioflag;
 		struct ucred *a_cred;
 	} */ *ap)
 {
@@ -843,8 +843,9 @@ ffs_write(
 	ufs_lbn_t lbn;
 	off_t osize;
 	ssize_t resid, r;
+	uint64_t ioflag;
 	int seqcount;
-	int blkoffset, error, flags, ioflag, size, xfersize;
+	int blkoffset, error, flags, size, xfersize;
 
 	vp = ap->a_vp;
 	if (DOINGSUJ(vp))
@@ -1057,7 +1058,7 @@ ffs_write(
  * Extended attribute area reading.
  */
 static int
-ffs_extread(struct vnode *vp, struct uio *uio, int ioflag)
+ffs_extread(struct vnode *vp, struct uio *uio, uint64_t ioflag)
 {
 	struct inode *ip;
 	struct ufs2_dinode *dp;
@@ -1176,7 +1177,7 @@ ffs_extread(struct vnode *vp, struct uio *uio, int ioflag)
  * Extended attribute area writing.
  */
 static int
-ffs_extwrite(struct vnode *vp, struct uio *uio, int ioflag, struct ucred *ucred)
+ffs_extwrite(struct vnode *vp, struct uio *uio, uint64_t ioflag, struct ucred *ucred)
 {
 	struct inode *ip;
 	struct ufs2_dinode *dp;

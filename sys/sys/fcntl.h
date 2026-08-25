@@ -182,9 +182,9 @@ typedef	__pid_t		pid_t;
 /* Flags userspace is allowed to pass to openat() */
 #define	FUSERALLOWED	(O_ACCMODE | O_NONBLOCK | O_APPEND | O_SHLOCK | \
     O_EXLOCK | O_ASYNC | O_SYNC | O_NOFOLLOW | O_CREAT | O_TRUNC | \
-    O_EXCL | O_NOCTTY | O_DIRECT | O_DIRECTORY | O_EXEC | O_TTY_INIT | \
-    O_CLOEXEC | O_VERIFY | O_PATH | O_RESOLVE_BENEATH | O_DSYNC | \
-    O_EMPTY_PATH | O_NAMEDATTR | O_CLOFORK)
+    O_EXCL | O_FILLORKILL | O_NOCTTY | O_DIRECT | O_DIRECTORY | O_EXEC | \
+    O_TTY_INIT | O_CLOEXEC | O_VERIFY | O_PATH | O_RESOLVE_BENEATH | \
+    O_DSYNC | O_EMPTY_PATH | O_NAMEDATTR | O_CLOFORK)
 
 /* convert from open() flags to/from fflags; convert O_RD/WR to FREAD/FWRITE */
 #define	FFLAGS(oflags)	((oflags) & O_EXEC ? (oflags) : (oflags) + 1)
@@ -193,9 +193,10 @@ typedef	__pid_t		pid_t;
 
 /* bits to save after open */
 #define	FMASK	(FREAD|FWRITE|FAPPEND|FASYNC|FFSYNC|FDSYNC|FNONBLOCK| \
-		 O_DIRECT|FEXEC|O_PATH)
+		 O_DIRECT|FEXEC|O_PATH|O_FILLORKILL)
 /* bits settable by fcntl(F_SETFL, ...) */
-#define	FCNTLFLAGS	(FAPPEND|FASYNC|FFSYNC|FDSYNC|FNONBLOCK|FRDAHEAD|O_DIRECT)
+#define	FCNTLFLAGS	(FAPPEND|FASYNC|FFSYNC|FDSYNC|FNONBLOCK|FRDAHEAD|\
+			 O_DIRECT|O_FILLORKILL)
 
 #if defined(COMPAT_FREEBSD7) || defined(COMPAT_FREEBSD6) || \
     defined(COMPAT_FREEBSD5) || defined(COMPAT_FREEBSD4)

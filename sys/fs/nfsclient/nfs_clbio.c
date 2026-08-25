@@ -70,7 +70,7 @@ uma_zone_t ncl_pbuf_zone;
 static struct buf *nfs_getcacheblk(struct vnode *vp, daddr_t bn, int size,
     struct thread *td);
 static int nfs_directio_write(struct vnode *vp, struct uio *uiop,
-    struct ucred *cred, int ioflag);
+    struct ucred *cred, uint64_t ioflag);
 
 /*
  * Vnode op for VM getpages.
@@ -430,7 +430,7 @@ ncl_bioread_dora(struct vnode *vp)
  * Vnode op for read using bio
  */
 int
-ncl_bioread(struct vnode *vp, struct uio *uio, int ioflag, struct ucred *cred)
+ncl_bioread(struct vnode *vp, struct uio *uio, uint64_t ioflag, struct ucred *cred)
 {
 	struct nfsnode *np = VTONFS(vp);
 	struct buf *bp, *rabp;
@@ -472,7 +472,7 @@ ncl_bioread(struct vnode *vp, struct uio *uio, int ioflag, struct ucred *cred)
 	n = 0;
 	on = 0;
 	biosize = vp->v_bufobj.bo_bsize;
-	seqcount = (int)((off_t)(ioflag >> IO_SEQSHIFT) * biosize / BKVASIZE);
+	seqcount = (int)((ioflag >> IO_SEQSHIFT) * biosize / BKVASIZE);
 
 	error = nfs_bioread_check_cons(vp, td, cred);
 	if (error)
@@ -762,7 +762,7 @@ out:
  */
 static int
 nfs_directio_write(struct vnode *vp, struct uio *uiop, struct ucred *cred,
-    int ioflag)
+    uint64_t ioflag)
 {
 	struct uio uio;
 	struct iovec iov;
@@ -833,7 +833,7 @@ ncl_write(struct vop_write_args *ap)
 	struct vnode *vp = ap->a_vp;
 	struct nfsnode *np = VTONFS(vp);
 	struct ucred *cred = ap->a_cred;
-	int ioflag = ap->a_ioflag;
+	uint64_t ioflag = ap->a_ioflag;
 	struct buf *bp;
 	struct vattr vattr;
 	struct nfsmount *nmp = VFSTONFS(vp->v_mount);

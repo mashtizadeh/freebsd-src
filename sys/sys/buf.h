@@ -550,6 +550,8 @@ caddr_t	kern_vfs_bio_buffer_alloc(caddr_t v, long physmem_est);
 void	bufinit(void);
 void	bufshutdown(int);
 void	bdata2bio(struct buf *bp, struct bio *bip);
+int	breserve(struct vnode *vn, uint64_t bufs);
+int	brelease(struct vnode *vn, uint64_t bufs);
 void	bwillwrite(void);
 int	buf_dirty_count_severe(void);
 void	bremfree(struct buf *);

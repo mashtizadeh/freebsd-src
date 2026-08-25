@@ -178,7 +178,7 @@ struct vnode {
 	struct	lock *v_vnlock;			/* u pointer to vnode lock */
 
 	/*
-	 * The machinery of being a vnode
+	* The machinery of being a vnode
 	 */
 	TAILQ_ENTRY(vnode) v_vnodelist;		/* l vnode lists */
 	TAILQ_ENTRY(vnode) v_lazylist;		/* l vnode lazy list */
@@ -350,9 +350,10 @@ struct vattr {
 #define	IO_BUFLOCKED	0x2000		/* ffs flag; indir buf is locked */
 #define	IO_RANGELOCKED	0x4000		/* range locked */
 #define	IO_DATASYNC	0x8000		/* do only data I/O synchronously */
+#define	IO_FILLORKILL	0x10000		/* fill or kill I/O */
 
-#define IO_SEQMAX	0x7F		/* seq heuristic max value */
-#define IO_SEQSHIFT	16		/* seq heuristic in upper 16 bits */
+#define IO_SEQMAX	0x7FULL		/* seq heuristic max value */
+#define IO_SEQSHIFT	48		/* seq heuristic in upper 16 bits */
 
 /*
  * Flags for accmode_t.
@@ -650,6 +651,7 @@ struct uio;
 struct vattr;
 struct vfsops;
 struct vnode;
+struct g_consumer;
 
 typedef int (*vn_get_ino_t)(struct mount *, void *, int, struct vnode **);
 
@@ -778,7 +780,7 @@ int	vn_copy_file_range(struct vnode *invp, off_t *inoffp,
 	    unsigned int flags, struct ucred *incred, struct ucred *outcred,
 	    struct thread *fsize_td);
 int	vn_deallocate(struct vnode *vp, off_t *offset, off_t *length, int flags,
-	    int ioflg, struct ucred *active_cred, struct ucred *file_cred);
+	    uint64_t ioflg, struct ucred *active_cred, struct ucred *file_cred);
 void	vn_finished_write(struct mount *mp);
 void	vn_finished_secondary_write(struct mount *mp);
 int	vn_fsync_buf(struct vnode *vp, int waitfor);
@@ -803,11 +805,11 @@ void	vn_pages_remove_valid(struct vnode *vp, vm_pindex_t start,
 	    vm_pindex_t end);
 int	vn_pollrecord(struct vnode *vp, struct thread *p, int events);
 int	vn_rdwr(enum uio_rw rw, struct vnode *vp, void *base,
-	    int len, off_t offset, enum uio_seg segflg, int ioflg,
+	    int len, off_t offset, enum uio_seg segflg, uint64_t ioflg,
 	    struct ucred *active_cred, struct ucred *file_cred, ssize_t *aresid,
 	    struct thread *td);
 int	vn_rdwr_inchunks(enum uio_rw rw, struct vnode *vp, void *base,
-	    size_t len, off_t offset, enum uio_seg segflg, int ioflg,
+	    size_t len, off_t offset, enum uio_seg segflg, uint64_t ioflg,
 	    struct ucred *active_cred, struct ucred *file_cred, size_t *aresid,
 	    struct thread *td);
 int	vn_read_from_obj(struct vnode *vp, struct uio *uio);
@@ -817,17 +819,21 @@ int	vn_rlimit_fsizex(const struct vnode *vp, struct uio *uio,
 	    off_t maxfsz, ssize_t *resid_adj, struct thread *td);
 void	vn_rlimit_fsizex_res(struct uio *uio, ssize_t resid_adj);
 int	vn_rlimit_trunc(u_quad_t size, struct thread *td);
+int	vn_fillorkill(struct g_consumer *cp, const struct vnode *vp,
+	    uint64_t bufs, uint64_t ioschedlen);
+int	vn_fillorkill_release(struct g_consumer *cp, const struct vnode *vp,
+	    uint64_t bufs, uint64_t ioschedlen);
 int	vn_start_write(struct vnode *vp, struct mount **mpp, int flags);
 int	vn_start_secondary_write(struct vnode *vp, struct mount **mpp,
 	    int flags);
 int	vn_truncate_locked(struct vnode *vp, off_t length, bool sync,
 	    struct ucred *cred);
 int	vn_writechk(struct vnode *vp);
-int	vn_extattr_get(struct vnode *vp, int ioflg, int attrnamespace,
+int	vn_extattr_get(struct vnode *vp, uint64_t ioflg, int attrnamespace,
 	    const char *attrname, int *buflen, char *buf, struct thread *td);
-int	vn_extattr_set(struct vnode *vp, int ioflg, int attrnamespace,
+int	vn_extattr_set(struct vnode *vp, uint64_t ioflg, int attrnamespace,
 	    const char *attrname, int buflen, char *buf, struct thread *td);
-int	vn_extattr_rm(struct vnode *vp, int ioflg, int attrnamespace,
+int	vn_extattr_rm(struct vnode *vp, uint64_t ioflg, int attrnamespace,
 	    const char *attrname, struct thread *td);
 int	vn_vget_ino(struct vnode *vp, ino_t ino, int lkflags,
 	    struct vnode **rvp);

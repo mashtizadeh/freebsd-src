@@ -45,6 +45,7 @@
 
 #include <sys/param.h>
 #include <sys/systm.h>
+#include <sys/bio.h>
 #include <sys/buf.h>
 #include <sys/disk.h>
 #include <sys/dirent.h>
@@ -71,6 +72,8 @@
 #include <sys/unistd.h>
 #include <sys/user.h>
 #include <sys/vnode.h>
+
+#include <geom/geom.h>
 
 #include <security/audit/audit.h>
 #include <security/mac/mac_framework.h>
@@ -605,7 +608,7 @@ vn_close(struct vnode *vp, int flags, struct ucred *file_cred,
 /*
  * Heuristic to detect sequential operation.
  */
-static int
+static uint64_t
 sequential_heuristic(struct uio *uio, struct file *fp)
 {
 	enum uio_rw rw;
@@ -614,7 +617,7 @@ sequential_heuristic(struct uio *uio, struct file *fp)
 
 	rw = uio->uio_rw;
 	if (fp->f_flag & FRDAHEAD)
-		return (fp->f_seqcount[rw] << IO_SEQSHIFT);
+		return ((uint64_t)fp->f_seqcount[rw] << IO_SEQSHIFT);
 
 	/*
 	 * Offset 0 is handled specially.  open() sets f_seqcount to 1 so
@@ -641,7 +644,7 @@ sequential_heuristic(struct uio *uio, struct file *fp)
 			if (fp->f_seqcount[rw] > IO_SEQMAX)
 				fp->f_seqcount[rw] = IO_SEQMAX;
 		}
-		return (fp->f_seqcount[rw] << IO_SEQSHIFT);
+		return ((uint64_t)fp->f_seqcount[rw] << IO_SEQSHIFT);
 	}
 
 	/* Not sequential.  Quickly draw-down sequentiality. */
@@ -657,7 +660,7 @@ sequential_heuristic(struct uio *uio, struct file *fp)
  */
 int
 vn_rdwr(enum uio_rw rw, struct vnode *vp, void *base, int len, off_t offset,
-    enum uio_seg segflg, int ioflg, struct ucred *active_cred,
+    enum uio_seg segflg, uint64_t ioflg, struct ucred *active_cred,
     struct ucred *file_cred, ssize_t *aresid, struct thread *td)
 {
 	struct uio auio;
@@ -761,7 +764,7 @@ vn_rdwr(enum uio_rw rw, struct vnode *vp, void *base, int len, off_t offset,
  */
 int
 vn_rdwr_inchunks(enum uio_rw rw, struct vnode *vp, void *base, size_t len,
-    off_t offset, enum uio_seg segflg, int ioflg, struct ucred *active_cred,
+    off_t offset, enum uio_seg segflg, uint64_t ioflg, struct ucred *active_cred,
     struct ucred *file_cred, size_t *aresid, struct thread *td)
 {
 	int error = 0;
@@ -1067,10 +1070,10 @@ get_advice(struct file *fp, struct uio *uio)
 	return (ret);
 }
 
-static int
+static uint64_t
 get_write_ioflag(struct file *fp)
 {
-	int ioflag;
+	uint64_t ioflag;
 	struct mount *mp;
 	struct vnode *vp;
 
@@ -1212,7 +1215,8 @@ vn_read(struct file *fp, struct uio *uio, struct ucred *active_cred, int flags,
 {
 	struct vnode *vp;
 	off_t orig_offset;
-	int error, ioflag;
+	uint64_t ioflag;
+	int error;
 	int advice;
 
 	KASSERT(uio->uio_td == td, ("uio_td %p is not td %p",
@@ -1284,7 +1288,8 @@ vn_write(struct file *fp, struct uio *uio, struct ucred *active_cred, int flags,
 	struct vnode *vp;
 	struct mount *mp;
 	off_t orig_offset;
-	int error, ioflag;
+	uint64_t ioflag;
+	int error;
 	int advice;
 	bool need_finished_write;
 
@@ -1292,13 +1297,15 @@ vn_write(struct file *fp, struct uio *uio, struct ucred *active_cred, int flags,
 	    uio->uio_td, td));
 	KASSERT(flags & FOF_OFFSET, ("No FOF_OFFSET"));
 	vp = fp->f_vnode;
-	if (vp->v_type == VREG)
+	if (vp->v_type == VREG && (fp->f_flag & O_FILLORKILL) == 0)
 		bwillwrite();
 	ioflag = IO_UNIT;
 	if (vp->v_type == VREG && (fp->f_flag & O_APPEND) != 0)
 		ioflag |= IO_APPEND;
 	if ((fp->f_flag & FNONBLOCK) != 0)
 		ioflag |= IO_NDELAY;
+	if ((fp->f_flag & O_FILLORKILL) != 0)
+		ioflag |= IO_FILLORKILL;
 	ioflag |= get_write_ioflag(fp);
 
 	mp = NULL;
@@ -2436,7 +2443,7 @@ vn_kqfilter_opath(struct file *fp, struct knote *kn)
  * Set IO_NODELOCKED in ioflg if the vnode is already locked.
  */
 int
-vn_extattr_get(struct vnode *vp, int ioflg, int attrnamespace,
+vn_extattr_get(struct vnode *vp, uint64_t ioflg, int attrnamespace,
     const char *attrname, int *buflen, char *buf, struct thread *td)
 {
 	struct uio	auio;
@@ -2477,7 +2484,7 @@ vn_extattr_get(struct vnode *vp, int ioflg, int attrnamespace,
  * XXX failure mode if partially written?
  */
 int
-vn_extattr_set(struct vnode *vp, int ioflg, int attrnamespace,
+vn_extattr_set(struct vnode *vp, uint64_t ioflg, int attrnamespace,
     const char *attrname, int buflen, char *buf, struct thread *td)
 {
 	struct uio	auio;
@@ -2516,7 +2523,7 @@ vn_extattr_set(struct vnode *vp, int ioflg, int attrnamespace,
 }
 
 int
-vn_extattr_rm(struct vnode *vp, int ioflg, int attrnamespace,
+vn_extattr_rm(struct vnode *vp, uint64_t ioflg, int attrnamespace,
     const char *attrname, struct thread *td)
 {
 	struct mount	*mp;
@@ -2719,6 +2726,70 @@ vn_rlimit_fsize(const struct vnode *vp, const struct uio *uio,
 {
 	return (vn_rlimit_fsizex(vp, __DECONST(struct uio *, uio), 0, NULL,
 	    td));
+}
+
+/*
+ * For fill-or-kill I/Os this reserved buffer cache space and I/O time with the 
+ * io scheduler.  If either reservation fails we should abort the I/O with 
+ * EAGAIN.
+ */
+int
+vn_fillorkill(struct g_consumer *cp, const struct vnode *vp, uint64_t bufs,
+	uint64_t ioschedlen)
+{
+	int error;
+	size_t result;
+
+	/*
+	 * XXX: We should have a reservation structure that we book keep 
+	 * against, also lets us retain multiple values for bufs and IO 
+	 * reservations in case we need to release it.
+	 */
+	error = breserve(vp, bufs);
+	if (error != 0) {
+		return (EAGAIN);
+	}
+
+	// I/O Scheduler reservation
+	error = g_io_iosched(ioschedlen, BIO_RESERVED, &result, cp);
+	if (error != 0 || result != 0) {
+		printf("g_io_iosched: error = %d, result = %zu\n",
+		    error, result);
+		brelease(vp, bufs);
+		return (EAGAIN);
+	}
+
+	return (0);
+}
+
+/*
+ * Release fill-or-kill I/Os reservations
+ */
+int
+vn_fillorkill_release(struct g_consumer *cp, const struct vnode *vp,
+    uint64_t bufs, uint64_t ioschedlen)
+{
+	int error;
+	size_t result;
+
+	printf("fillorkill_release %lu %lu\n",
+		bufs, ioschedlen);
+
+	/* Release buf reservation */
+	if (bufs) {
+		brelease(vp, bufs);
+	}
+
+	/* Release I/O Scheduler reservation */
+	if (ioschedlen) {
+		error = g_io_iosched(-ioschedlen, BIO_RESERVED, &result, cp);
+		if (error != 0) {
+			printf("Unexpected failure %d\n", error);
+			// XXX: Handle
+		}
+	}
+
+	return (0);
 }
 
 int
@@ -3948,7 +4019,7 @@ vn_fallocate(struct file *fp, off_t offset, off_t len, struct thread *td)
 
 static int
 vn_deallocate_impl(struct vnode *vp, off_t *offset, off_t *length, int flags,
-    int ioflag, struct ucred *cred, struct ucred *active_cred,
+    uint64_t ioflag, struct ucred *cred, struct ucred *active_cred,
     struct ucred *file_cred)
 {
 	struct mount *mp;
@@ -4022,7 +4093,7 @@ out:
  */
 int
 vn_deallocate(struct vnode *vp, off_t *offset, off_t *length, int flags,
-    int ioflag, struct ucred *active_cred, struct ucred *file_cred)
+    uint64_t ioflag, struct ucred *active_cred, struct ucred *file_cred)
 {
 	struct ucred *cred;
 
@@ -4043,7 +4114,7 @@ vn_fspacectl(struct file *fp, int cmd, off_t *offset, off_t *length, int flags,
 {
 	int error;
 	struct vnode *vp;
-	int ioflag;
+	uint64_t ioflag;
 
 	KASSERT(cmd == SPACECTL_DEALLOC, ("vn_fspacectl: Invalid cmd"));
 	KASSERT((flags & ~SPACECTL_F_SUPPORTED) == 0,

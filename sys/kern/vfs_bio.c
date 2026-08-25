@@ -884,7 +884,7 @@ breserve(const struct vnode *vp, uint64_t bufs)
 	int error;
 
 	bd = &bdomain[vp->v_bufobj.bo_domain];
-	error = bufspace_reserve(bd, bufs);
+	error = bufspace_reserve(bd, bufs, false);
 
 	return (error);
 }
@@ -895,9 +895,9 @@ brelease(const struct vnode *vp, uint64_t bufs)
 	struct bufdomain *bd;
 
 	bd = &bdomain[vp->v_bufobj.bo_domain];
-	bufspace_reserve(bd, bufs);
+	bufspace_release(bd, bufs);
 
-	return (0);
+	return;
 }
 
 /*

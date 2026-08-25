@@ -259,6 +259,7 @@ g_union_ctl_create(struct gctl_req *req, struct g_class *mp, bool verbose)
 	sc->sc_getattrs = 0;
 	sc->sc_flushes = 0;
 	sc->sc_speedups = 0;
+	sc->sc_ioscheds = 0;
 	sc->sc_cmd0s = 0;
 	sc->sc_cmd1s = 0;
 	sc->sc_cmd2s = 0;
@@ -506,6 +507,7 @@ g_union_ctl_reset(struct gctl_req *req, struct g_class *mp, bool verbose)
 		sc->sc_getattrs = 0;
 		sc->sc_flushes = 0;
 		sc->sc_speedups = 0;
+		sc->sc_ioscheds = 0;
 		sc->sc_cmd0s = 0;
 		sc->sc_cmd1s = 0;
 		sc->sc_cmd2s = 0;
@@ -823,7 +825,7 @@ g_union_start(struct bio *bp)
 	/*
 	 * All commands other than read and write are passed through to
 	 * the upper-level device since it is writable and thus able to
-	 * respond to delete, flush, and speedup requests.
+	 * respond to delete, flush, speedup, and iosched requests.
 	 */
 	cbp = g_clone_bio(bp);
 	if (cbp == NULL) {
@@ -853,6 +855,10 @@ g_union_start(struct bio *bp)
 	case BIO_SPEEDUP:
 		G_UNION_LOGREQ(cbp, "Speedup request received.");
 		atomic_add_long(&sc->sc_speedups, 1);
+		break;
+	case BIO_IOSCHED:
+		G_UNION_LOGREQ(cbp, "IOSched request received.");
+		atomic_add_long(&sc->sc_ioscheds, 1);
 		break;
 	case BIO_CMD0:
 		G_UNION_LOGREQ(cbp, "Cmd0 request received.");
@@ -1259,6 +1265,8 @@ g_union_dumpconf(struct sbuf *sb, const char *indent, struct g_geom *gp,
 	    (uintmax_t)sc->sc_flushes);
 	sbuf_printf(sb, "%s<Speedups>%ju</Speedups>\n", indent,
 	    (uintmax_t)sc->sc_speedups);
+	sbuf_printf(sb, "%s<IOScheds>%ju</IOScheds>\n", indent,
+	    (uintmax_t)sc->sc_ioscheds);
 	sbuf_printf(sb, "%s<Cmd0s>%ju</Cmd0s>\n", indent,
 	    (uintmax_t)sc->sc_cmd0s);
 	sbuf_printf(sb, "%s<Cmd1s>%ju</Cmd1s>\n", indent,

@@ -233,7 +233,7 @@ struct buf {
 #define	B_CLUSTEROK	0x00020000	/* Pagein op, so swap() can count it. */
 #define	B_INVALONERR	0x00040000	/* Invalidate on write error. */
 #define	B_IOSTARTED	0x00080000	/* buf_start() called */
-#define	B_00100000	0x00100000	/* Available flag. */
+#define	B_RESERVED	0x00100000	/* Reserved I/O */
 #define	B_MAXPHYS	0x00200000	/* nitems(b_pages[]) = atop(MAXPHYS). */
 #define	B_RELBUF	0x00400000	/* Release VMIO buffer. */
 #define	B_FS_FLAG1	0x00800000	/* Available flag for FS use. */
@@ -550,8 +550,8 @@ caddr_t	kern_vfs_bio_buffer_alloc(caddr_t v, long physmem_est);
 void	bufinit(void);
 void	bufshutdown(int);
 void	bdata2bio(struct buf *bp, struct bio *bip);
-int	breserve(struct vnode *vn, uint64_t bufs);
-int	brelease(struct vnode *vn, uint64_t bufs);
+int	breserve(const struct vnode *vn, uint64_t bufs);
+void	brelease(const struct vnode *vn, uint64_t bufs);
 void	bwillwrite(void);
 int	buf_dirty_count_severe(void);
 void	bremfree(struct buf *);

@@ -2265,6 +2265,7 @@ g_part_start(struct bio *bp)
 		g_io_request(bp2, cp);
 		return;
 	case BIO_SPEEDUP:
+	case BIO_IOSCHED:
 	case BIO_FLUSH:
 		break;
 	case BIO_GETATTR:

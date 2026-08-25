@@ -52,6 +52,7 @@
 #define BIO_CMD2	0x08	/* Available for local hacks */
 #define BIO_ZONE	0x09	/* Zone command */
 #define BIO_SPEEDUP	0x0a	/* Upper layers face shortage */
+#define BIO_IOSCHED	0x0b	/* IO Scheduler */
 
 /* bio_flags */
 #define BIO_ERROR	0x01	/* An error occurred processing this bio. */
@@ -65,6 +66,7 @@
 #define	BIO_UNMAPPED	0x10
 #define	BIO_TRANSIENT_MAPPING	0x20
 #define	BIO_VLIST	0x40
+#define	BIO_RESERVED	0x100	/* Holds I/O Scheduler reservation */
 #define	BIO_SWAP	0x200	/* Swap-related I/O */
 #define	BIO_EXTERR	0x2000
 #define BIO_SPEEDUP_WRITE	0x4000	/* Resource shortage at upper layers */

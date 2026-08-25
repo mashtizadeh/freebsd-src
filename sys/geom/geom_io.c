@@ -368,6 +368,42 @@ g_io_speedup(off_t shortage, u_int flags, size_t *resid, struct g_consumer *cp)
 	return (error);
 }
 
+/*
+ * Send a BIO_IOSCHED that is used to reserve or release I/O time at a time 
+ * inside the I/O scheduler.  The I/O scheduler tries to estimate the amount of 
+ * time that it will take to process all currently queued I/Os and reserve the 
+ * future time if it's available.  Otherwise, it will reject the reservation.
+ * bio_length contains the amount of data to reserve at the I/O scheduler and 
+ * bio_resid contains the result.  Positive values are used for reservations 
+ * and negative values for release.
+ */
+int
+g_io_iosched(off_t reservation, u_int flags, size_t *resid, struct g_consumer *cp)
+{
+	struct bio *bp;
+	int error;
+
+	KASSERT((flags & BIO_RESERVED) != 0,
+	    ("Invalid flags passed to g_io_iosched: %#x", flags));
+	g_trace(G_T_BIO, "bio_iosched(%s, %jd, %#x)", cp->provider->name,
+	    (intmax_t)reservation, flags);
+
+	/*
+	 * We can drop reservations during low memory but not releases as that 
+	 * would leak resources.
+	 */
+	bp = g_alloc_bio();
+	bp->bio_cmd = BIO_IOSCHED;
+	bp->bio_length = reservation;
+	bp->bio_done = NULL;
+	bp->bio_flags |= flags;
+	g_io_request(bp, cp);
+	error = biowait(bp, "giosched");
+	*resid = bp->bio_resid;
+	g_destroy_bio(bp);
+	return (error);
+}
+
 int
 g_io_flush(struct g_consumer *cp)
 {
@@ -412,6 +448,7 @@ g_io_check(struct bio *bp)
 	case BIO_WRITE:
 	case BIO_DELETE:
 	case BIO_SPEEDUP:
+	case BIO_IOSCHED:
 	case BIO_FLUSH:
 		if (cp->acw == 0)
 			return (EPERM);
@@ -525,7 +562,8 @@ g_io_request(struct bio *bp, struct g_consumer *cp)
 		KASSERT(bp->bio_data != NULL,
 		    ("NULL bp->data in g_io_request(cmd=%hu)", bp->bio_cmd));
 	}
-	if (cmd == BIO_DELETE || cmd == BIO_FLUSH || cmd == BIO_SPEEDUP) {
+	if (cmd == BIO_DELETE || cmd == BIO_FLUSH || cmd == BIO_SPEEDUP ||
+	    cmd == BIO_IOSCHED) {
 		KASSERT(bp->bio_data == NULL,
 		    ("non-NULL bp->data in g_io_request(cmd=%hu)",
 		    bp->bio_cmd));
@@ -637,7 +675,9 @@ g_io_deliver(struct bio *bp, int error)
 		    ("bio_cflags used by the provider %s", pp->name));
 	}
 #endif
-	KASSERT(bp->bio_completed >= 0, ("bio_completed can't be less than 0"));
+	if (bp->bio_cmd != BIO_IOSCHED) {
+		KASSERT(bp->bio_completed >= 0, ("bio_completed can't be less than 0"));
+	}
 	KASSERT(bp->bio_completed <= bp->bio_length,
 	    ("bio_completed can't be greater than bio_length"));
 

@@ -254,6 +254,9 @@ g_nop_start(struct bio *bp)
 	case BIO_SPEEDUP:
 		sc->sc_speedups++;
 		break;
+	case BIO_IOSCHED:
+		sc->sc_ioscheds++;
+		break;
 	case BIO_CMD0:
 		sc->sc_cmd0s++;
 		break;
@@ -439,6 +442,7 @@ g_nop_create(struct gctl_req *req, struct g_class *mp, struct g_provider *pp,
 	sc->sc_getattrs = 0;
 	sc->sc_flushes = 0;
 	sc->sc_speedups = 0;
+	sc->sc_ioscheds = 0;
 	sc->sc_cmd0s = 0;
 	sc->sc_cmd1s = 0;
 	sc->sc_cmd2s = 0;
@@ -890,6 +894,7 @@ g_nop_ctl_reset(struct gctl_req *req, struct g_class *mp)
 		sc->sc_getattrs = 0;
 		sc->sc_flushes = 0;
 		sc->sc_speedups = 0;
+		sc->sc_ioscheds = 0;
 		sc->sc_cmd0s = 0;
 		sc->sc_cmd1s = 0;
 		sc->sc_cmd2s = 0;
@@ -961,6 +966,7 @@ g_nop_dumpconf(struct sbuf *sb, const char *indent, struct g_geom *gp,
 	sbuf_printf(sb, "%s<Getattrs>%ju</Getattrs>\n", indent, sc->sc_getattrs);
 	sbuf_printf(sb, "%s<Flushes>%ju</Flushes>\n", indent, sc->sc_flushes);
 	sbuf_printf(sb, "%s<Speedups>%ju</Speedups>\n", indent, sc->sc_speedups);
+	sbuf_printf(sb, "%s<IOScheds>%ju</IOScheds>\n", indent, sc->sc_ioscheds);
 	sbuf_printf(sb, "%s<Cmd0s>%ju</Cmd0s>\n", indent, sc->sc_cmd0s);
 	sbuf_printf(sb, "%s<Cmd1s>%ju</Cmd1s>\n", indent, sc->sc_cmd1s);
 	sbuf_printf(sb, "%s<Cmd2s>%ju</Cmd2s>\n", indent, sc->sc_cmd2s);

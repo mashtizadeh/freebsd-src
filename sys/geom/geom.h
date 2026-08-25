@@ -338,6 +338,8 @@ int g_io_zonecmd(struct disk_zone_args *zone_args, struct g_consumer *cp);
 int g_io_flush(struct g_consumer *cp);
 int g_io_speedup(off_t shortage, u_int flags, size_t *resid,
     struct g_consumer *cp);
+int g_io_iosched(off_t reserv, u_int flags, size_t *resid,
+    struct g_consumer *cp);
 void g_io_request(struct bio *bp, struct g_consumer *cp);
 struct bio *g_new_bio(void);
 struct bio *g_alloc_bio(void);

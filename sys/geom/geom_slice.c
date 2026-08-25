@@ -307,6 +307,7 @@ g_slice_start(struct bio *bp)
 		}
 		/* FALLTHROUGH */
 	case BIO_SPEEDUP:
+	case BIO_IOSCHED:
 	case BIO_FLUSH:
 		bp2 = g_clone_bio(bp);
 		if (bp2 == NULL) {

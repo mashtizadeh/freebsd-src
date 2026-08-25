@@ -76,6 +76,7 @@ struct g_union_softc {
 	long		   sc_cmd1s;		/* number of cmd1's done */
 	long		   sc_cmd2s;		/* number of cmd2's done */
 	long		   sc_speedups;		/* number of speedups done */
+	long		   sc_ioscheds;		/* number of ioscheds done */
 	long		   sc_readcurrentread;	/* reads current with read */
 	long		   sc_readblockwrite;	/* writes blocked by read */
 	long		   sc_writeblockread;	/* reads blocked by write */

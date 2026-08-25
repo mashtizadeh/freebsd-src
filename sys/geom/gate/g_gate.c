@@ -282,6 +282,7 @@ g_gate_start(struct bio *pbp)
 	case BIO_WRITE:
 	case BIO_FLUSH:
 	case BIO_SPEEDUP:
+	case BIO_IOSCHED:
 		/* XXX: Hack to allow read-only mounts. */
 		if ((sc->sc_flags & G_GATE_FLAG_READONLY) != 0) {
 			g_io_deliver(pbp, EPERM);
@@ -881,6 +882,7 @@ g_gate_ioctl(struct cdev *dev, u_long cmd, caddr_t addr, int flags, struct threa
 		case BIO_DELETE:
 		case BIO_FLUSH:
 		case BIO_SPEEDUP:
+		case BIO_IOSCHED:
 			break;
 		case BIO_WRITE:
 			error = copyout(bp->bio_data, ggio->gctl_data,
@@ -946,6 +948,7 @@ start_end:
 				case BIO_WRITE:
 				case BIO_FLUSH:
 				case BIO_SPEEDUP:
+				case BIO_IOSCHED:
 					break;
 				}
 			}

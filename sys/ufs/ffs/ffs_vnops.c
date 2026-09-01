@@ -840,10 +840,13 @@ ffs_write(
 	struct inode *ip;
 	struct fs *fs;
 	struct buf *bp;
+	struct ufsmount *ump;
 	ufs_lbn_t lbn;
 	off_t osize;
 	ssize_t resid, r;
 	uint64_t ioflag;
+	uint64_t resvblks = 0;
+	uint64_t resvlen = 0;
 	int seqcount;
 	int blkoffset, error, flags, size, xfersize;
 
@@ -914,6 +917,21 @@ ffs_write(
 		flags |= IO_SYNC;
 	flags |= BA_UNMAPPED;
 
+	if ((ioflag & (IO_SYNC|IO_FILLORKILL)) == IO_FILLORKILL) {
+		// XXX: Need to move these declarations out
+		ump = VFSTOUFS(vp->v_mount);
+		uint64_t soff = lblkno(fs, uio->uio_offset);
+		uint64_t eoff = lblkno(fs, blkroundup(fs, uio->uio_offset + uio->uio_resid));
+		resvblks = eoff - soff;
+		resvlen = uio->uio_resid;
+
+		error = vn_fillorkill(ump->um_cp, vp, resvblks, resvlen);
+		if (error != 0) {
+			vn_rlimit_fsizex_res(uio, r);
+			return (error);
+		}
+	}
+
 	for (error = 0; uio->uio_resid > 0;) {
 		lbn = lblkno(fs, uio->uio_offset);
 		blkoffset = blkoff(fs, uio->uio_offset);
@@ -931,10 +949,17 @@ ffs_write(
 			flags |= BA_CLRBUF;
 		else
 			flags &= ~BA_CLRBUF;
+		if (resvblks > 0) {
+			flags |= BA_RESERVED;
+			resvblks--;
+		} else {
+			flags &= ~BA_RESERVED;
+		}
 /* XXX is uio->uio_offset the right thing here? */
 		error = UFS_BALLOC(vp, uio->uio_offset, xfersize,
 		    ap->a_cred, flags, &bp);
 		if (error != 0) {
+			resvblks++;
 			vnode_pager_setsize(vp, ip->i_size);
 			break;
 		}
@@ -988,6 +1013,10 @@ ffs_write(
 		}
 
 		vfs_bio_set_flags(bp, ioflag);
+		if (resvlen > 0) {
+			bp->b_flags |= B_RESERVED;
+			resvlen -= xfersize;
+		}
 
 		/*
 		 * If IO_SYNC each buffer is written synchronously.  Otherwise
@@ -1050,6 +1079,11 @@ ffs_write(
 		if (ffs_fsfail_cleanup(VFSTOUFS(vp->v_mount), error))
 			error = ENXIO;
 	}
+
+	if ((ioflag & IO_FILLORKILL) != 0) {
+		vn_fillorkill_release(ump->um_cp, vp, resvblks, resvlen);
+	}
+
 	vn_rlimit_fsizex_res(uio, r);
 	return (error);
 }

@@ -68,6 +68,12 @@ static SYSCTL_NODE(_kern_cam, OID_AUTO, iosched, CTLFLAG_RD | CTLFLAG_MPSAFE, 0,
 
 #ifdef CAM_IOSCHED_DYNAMIC
 
+/*
+ * Enable/disable collecting the mean squared error for the queue latency 
+ * predictor.
+ */
+#define CAM_IOSCHED_PREDMSE
+
 static bool do_dynamic_iosched = true;
 SYSCTL_BOOL(_kern_cam_iosched, OID_AUTO, dynamic, CTLFLAG_RDTUN,
     &do_dynamic_iosched, 1,
@@ -265,6 +271,19 @@ struct iop_stats {
 	int		out;		/* number completed all time -- wraps */
 	int		errs;		/* Number of I/Os completed with error --  wraps */
 
+	uint64_t	pending_bytes;	/* Pending bytes */
+	uint64_t	queued_bytes;	/* Queued bytes */
+
+	/*
+	 * Queue reservations for fill-or-kill I/Os
+	 */
+	uint64_t	reserved;
+	uint64_t	reserved_bytes;
+	uint64_t	reserved_maxlatency;
+	uint64_t	reservations;
+	uint64_t	iopsbound;
+	uint64_t	tputbound;
+
 	/*
 	 * Statistics on different bits of the process.
 	 */
@@ -345,6 +364,12 @@ struct cam_iosched_softc {
 	sbintime_t	max_lat;		/* when != 0, if iop latency > max_lat, call max_lat_fcn */
 	cam_iosched_latfcn_t	latfcn;
 	void		*latarg;
+
+	/* Maximum observed IOPS and Throughput */
+	uint64_t	completed_ios;
+	uint64_t	completed_bytes;
+	uint64_t	peak_iops;
+	uint64_t	peak_tput;
 #endif
 };
 
@@ -607,6 +632,7 @@ cam_iosched_ticker(void *arg)
 {
 	struct cam_iosched_softc *isc = arg;
 	sbintime_t now, delta;
+	uint64_t iops, tput;
 	int pending;
 
 	callout_reset(&isc->ticker, hz / isc->quanta, cam_iosched_ticker, isc);
@@ -623,6 +649,21 @@ cam_iosched_ticker(void *arg)
 	cam_iosched_limiter_tick(&isc->trim_stats);
 
 	isc->schedfnc(isc->periph);
+
+	/*
+	 * Made a simpler implementation but this has more error.  The biggest 
+	 * error is when we are IOPS bound and have a low queue depth, but we 
+	 * can improve this.
+	 */
+	iops = isc->completed_ios * SBT_1S / delta;
+	if (isc->peak_iops < iops)
+		isc->peak_iops = iops;
+	isc->completed_ios = 0;
+
+	tput = isc->completed_bytes * SBT_1S / delta;
+	if (isc->peak_tput < tput)
+		isc->peak_tput = tput;
+	isc->completed_bytes = 0;
 
 	/*
 	 * isc->load is an EMA of the pending I/Os at each tick. The number of
@@ -859,8 +900,16 @@ cam_iosched_iop_stats_init(struct cam_iosched_softc *isc, struct iop_stats *ios)
 	ios->out = 0;
 	ios->errs = 0;
 	ios->pending = 0;
+	ios->pending_bytes = 0;
 	ios->queued = 0;
+	ios->queued_bytes = 0;
 	ios->total = 0;
+	ios->reserved = 0;
+	ios->reserved_bytes = 0;
+	ios->reserved_maxlatency = SBT_1S / 200; /* Default to 5ms */
+	ios->reservations = 0;
+	ios->iopsbound = 0;
+	ios->tputbound = 0;
 	ios->ema = 0;
 	ios->emvar = 0;
 	ios->bad_latency = SBT_1S / 2;	/* Default to 500ms */
@@ -1034,6 +1083,9 @@ cam_iosched_iop_stats_sysctl_init(struct cam_iosched_softc *isc, struct iop_stat
 	    OID_AUTO, "pending", CTLFLAG_RD,
 	    &ios->pending, 0,
 	    "Instantaneous # of pending transactions");
+	SYSCTL_ADD_U64(ctx, n,
+	    OID_AUTO, "pending_bytes", CTLFLAG_RD,
+	    &ios->reserved, 0, "bytes reserved");
 	SYSCTL_ADD_INT(ctx, n,
 	    OID_AUTO, "count", CTLFLAG_RD,
 	    &ios->total, 0,
@@ -1042,6 +1094,9 @@ cam_iosched_iop_stats_sysctl_init(struct cam_iosched_softc *isc, struct iop_stat
 	    OID_AUTO, "queued", CTLFLAG_RD,
 	    &ios->queued, 0,
 	    "# of transactions in the queue");
+	SYSCTL_ADD_U64(ctx, n,
+	    OID_AUTO, "queued_bytes", CTLFLAG_RD,
+	    &ios->reserved, 0, "bytes reserved");
 	SYSCTL_ADD_INT(ctx, n,
 	    OID_AUTO, "in", CTLFLAG_RD,
 	    &ios->in, 0,
@@ -1063,6 +1118,28 @@ cam_iosched_iop_stats_sysctl_init(struct cam_iosched_softc *isc, struct iop_stat
 	    CTLTYPE_STRING | CTLFLAG_RW | CTLFLAG_MPSAFE,
 	    &ios->bad_latency, 0, cam_iosched_sbintime_sysctl, "A",
 	    "Threshold for counting transactions that took too long (in us)");
+
+	SYSCTL_ADD_U64(ctx, n,
+	    OID_AUTO, "reserved", CTLFLAG_RD,
+	    &ios->reserved, 0, "# of reserved transactions");
+	SYSCTL_ADD_U64(ctx, n,
+	    OID_AUTO, "reserved_bytes", CTLFLAG_RD,
+	    &ios->reserved, 0, "bytes reserved");
+	SYSCTL_ADD_U64(ctx, n,
+	    OID_AUTO, "reserved_maxlatency", CTLFLAG_RW,
+	    &ios->reserved_maxlatency, 0,
+	    "Maximum target latency for I/O reservations");
+	SYSCTL_ADD_U64(ctx, n,
+	    OID_AUTO, "reservations", CTLFLAG_RD,
+	    &ios->reservations, 0, "# of reservations");
+	SYSCTL_ADD_U64(ctx, n,
+	    OID_AUTO, "iopsbound", CTLFLAG_RD,
+	    &ios->reservations, 0,
+	    "# of reservations rejected because of the IOPS bound");
+	SYSCTL_ADD_U64(ctx, n,
+	    OID_AUTO, "tputbound", CTLFLAG_RD,
+	    &ios->tputbound, 0,
+	    "# of reservations rejected because of the throughput bound");
 
 	SYSCTL_ADD_PROC(ctx, n,
 	    OID_AUTO, "limiter",
@@ -1285,6 +1362,16 @@ void cam_iosched_sysctl_init(struct cam_iosched_softc *isc,
 	    OID_AUTO, "latency_trigger", CTLFLAG_RW,
 	    &isc->max_lat, 0,
 	    "Latency treshold to trigger callbacks");
+
+	SYSCTL_ADD_U64(ctx, n,
+	    OID_AUTO, "peak_iops", CTLFLAG_RD,
+	    &isc->peak_iops, 0,
+	    "Peak observed IOPS");
+
+	SYSCTL_ADD_U64(ctx, n,
+	    OID_AUTO, "peak_tput", CTLFLAG_RD,
+	    &isc->peak_tput, 0,
+	    "Peak observed throughput (B/s)");
 #endif
 }
 
@@ -1404,8 +1491,10 @@ cam_iosched_get_write(struct cam_iosched_softc *isc)
 	bioq_remove(&isc->write_queue, bp);
 	if (bp->bio_cmd == BIO_WRITE) {
 		isc->write_stats.queued--;
+		isc->write_stats.pending_bytes -= bp->bio_resid;
 		isc->write_stats.total++;
 		isc->write_stats.pending++;
+		isc->write_stats.pending_bytes += bp->bio_resid;
 	}
 	if (iosched_debug > 9)
 		printf("HWQ : %p %#x\n", bp, bp->bio_cmd);
@@ -1426,8 +1515,10 @@ cam_iosched_put_back_trim(struct cam_iosched_softc *isc, struct bio *bp)
 	isc->queued_trims++;
 #ifdef CAM_IOSCHED_DYNAMIC
 	isc->trim_stats.queued++;
+	isc->trim_stats.queued_bytes += bp->bio_resid;
 	isc->trim_stats.total--;		/* since we put it back, don't double count */
 	isc->trim_stats.pending--;
+	isc->trim_stats.pending_bytes -= bp->bio_resid;
 #endif
 }
 
@@ -1451,8 +1542,10 @@ cam_iosched_next_trim(struct cam_iosched_softc *isc)
 	isc->last_trim_tick = ticks;	/* Reset the tick timer when we take trims */
 #ifdef CAM_IOSCHED_DYNAMIC
 	isc->trim_stats.queued--;
+	isc->trim_stats.queued_bytes -= bp->bio_resid;
 	isc->trim_stats.total++;
 	isc->trim_stats.pending++;
+	isc->trim_stats.pending_bytes += bp->bio_resid;
 #endif
 	return bp;
 }
@@ -1630,12 +1723,16 @@ cam_iosched_next_bio(struct cam_iosched_softc *isc)
 	if (do_dynamic_iosched) {
 		if (bp->bio_cmd == BIO_READ) {
 			isc->read_stats.queued--;
+			isc->read_stats.queued_bytes -= bp->bio_resid;
 			isc->read_stats.total++;
 			isc->read_stats.pending++;
+			isc->read_stats.pending_bytes += bp->bio_resid;
 		} else if (bp->bio_cmd == BIO_WRITE) {
 			isc->write_stats.queued--;
+			isc->write_stats.queued_bytes -= bp->bio_resid;
 			isc->write_stats.total++;
 			isc->write_stats.pending++;
+			isc->write_stats.pending_bytes += bp->bio_resid;
 		}
 	}
 	if (iosched_debug > 9)
@@ -1690,6 +1787,82 @@ cam_iosched_queue_work(struct cam_iosched_softc *isc, struct bio *bp)
 	}
 
 	/*
+	 * IO reservations for fill-or-kill I/Os.  We estimate the amount of 
+	 * work pending and reserve the I/Os if less than our threshold.  
+	 * Otherwise we return a failure that causes fill-or-kill I/Os to be 
+	 * rejected and allow the application to retry the I/O.
+	 *
+	 * XXX: Generalize this so we can eventually include reads
+	 */
+	if (bp->bio_cmd == BIO_IOSCHED) {
+#ifdef CAM_IOSCHED_DYNAMIC
+		sbintime_t iotime;
+
+		isc->write_stats.reservations++;
+
+		printf("BIO_IOSCHED: %ld %ld\n",
+		    bp->bio_length, bp->bio_resid);
+
+		// Negative values are releases
+		if (bp->bio_length < 0) {
+			isc->write_stats.reserved--;
+			isc->write_stats.reserved -= bp->bio_length;
+			bp->bio_resid = 0;
+			biodone(bp);
+			return;
+		}
+
+		/*
+		 * We don't appear to be under significant load.
+		 * XXX: Set an independent threshold for this
+		 */
+		if (isc->write_stats.ema < isc->write_stats.reserved_maxlatency) {
+			printf("BIO_IOSCHED: latency low %ld\n",
+			    isc->write_stats.ema);
+			bp->bio_resid = 0;
+			biodone(bp);
+			return;
+		}
+
+		/*
+		 * Check if we are iops bound
+		 * XXX: Simple improvement by considering QD
+		 */
+		iotime = (isc->write_stats.queued +
+			  isc->write_stats.pending +
+			  isc->write_stats.reserved) *
+			 (SBT_1S / isc->peak_iops);
+		if (ios_ms > isc->write_stats.reserved_maxlatency) {
+			isc->write_stats.iopsbound++;
+			bp->bio_resid = 1;
+			biodone(bp);
+			return;
+		}
+
+		/* Check if we are throughput bound */
+		iotime = (isc->write_stats.queued_bytes +
+		          isc->write_stats.pending_bytes +
+		          isc->write_stats.reserved_bytes) *
+		         (SBT_1S / isc->peak_tput);
+		if (tput_ms > isc->write_stats.reserved_maxlatency) {
+			isc->write_stats.tputbound++;
+			bp->bio_resid = 1;
+			biodone(bp);
+			return;
+		}
+
+		bp->bio_resid = 0;
+		isc->write_stats.reserved++;
+		isc->write_stats.reserved_bytes += bp->bio_length;
+#else
+		bp->bio_resid = 0;
+#endif
+
+		biodone(bp);
+		return;
+	}
+
+	/*
 	 * If we get a BIO_FLUSH, and we're doing delayed BIO_DELETEs then we
 	 * set the last tick time to one less than the current ticks minus the
 	 * delay to force the BIO_DELETEs to be presented to the client driver.
@@ -1709,6 +1882,7 @@ cam_iosched_queue_work(struct cam_iosched_softc *isc, struct bio *bp)
 #ifdef CAM_IOSCHED_DYNAMIC
 		isc->trim_stats.in++;
 		isc->trim_stats.queued++;
+		isc->trim_stats.queued_bytes += bp->bio_resid;
 #endif
 	}
 #ifdef CAM_IOSCHED_DYNAMIC
@@ -1723,6 +1897,7 @@ cam_iosched_queue_work(struct cam_iosched_softc *isc, struct bio *bp)
 		if (bp->bio_cmd == BIO_WRITE) {
 			isc->write_stats.in++;
 			isc->write_stats.queued++;
+			isc->write_stats.queued_bytes += bp->bio_resid;
 		}
 	}
 #endif
@@ -1737,12 +1912,23 @@ cam_iosched_queue_work(struct cam_iosched_softc *isc, struct bio *bp)
 		if (bp->bio_cmd == BIO_READ) {
 			isc->read_stats.in++;
 			isc->read_stats.queued++;
+			isc->read_stats.queued_bytes += bp->bio_resid;
 		} else if (bp->bio_cmd == BIO_WRITE) {
 			isc->write_stats.in++;
 			isc->write_stats.queued++;
+			isc->write_stats.queued_bytes += bp->bio_resid;
 		}
 #endif
 	}
+
+#ifdef CAM_IOSCHED_DYNAMIC
+	isc->completed_ios++;
+	isc->completed_bytes += bp->bio_length;
+
+	if ((bp->bio_flags & BIO_RESERVED) != 0) {
+		isc->write_stats.reserved -= bp->bio_length;
+	}
+#endif
 }
 
 /*
@@ -1787,17 +1973,20 @@ cam_iosched_bio_complete(struct cam_iosched_softc *isc, struct bio *bp,
 			isc->write_stats.errs++;
 		isc->write_stats.out++;
 		isc->write_stats.pending--;
+		isc->write_stats.pending_bytes -= bp->bio_resid;
 	} else if (bp->bio_cmd == BIO_READ) {
 		retval = cam_iosched_limiter_iodone(&isc->read_stats, bp);
 		if ((bp->bio_flags & BIO_ERROR) != 0)
 			isc->read_stats.errs++;
 		isc->read_stats.out++;
 		isc->read_stats.pending--;
+		isc->read_stats.pending_bytes -= bp->bio_resid;
 	} else if (bp->bio_cmd == BIO_DELETE) {
 		if ((bp->bio_flags & BIO_ERROR) != 0)
 			isc->trim_stats.errs++;
 		isc->trim_stats.out++;
 		isc->trim_stats.pending--;
+		isc->trim_stats.pending_bytes -= bp->bio_resid;
 	} else if (bp->bio_cmd != BIO_FLUSH) {
 		if (iosched_debug)
 			printf("Completing command with bio_cmd == %#x\n", bp->bio_cmd);

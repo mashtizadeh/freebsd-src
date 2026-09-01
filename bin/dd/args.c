@@ -404,6 +404,7 @@ static const struct oflag {
 	uint64_t set;
 } olist[] = {
 	{ "direct",	C_ODIRECT },
+	{ "fillorkill",	C_OFILLORKILL },
 	{ "fsync",	C_OFSYNC },
 	{ "sync",	C_OFSYNC },
 };

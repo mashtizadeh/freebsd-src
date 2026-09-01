@@ -182,6 +182,8 @@ setup(void)
 			oflags |= O_FSYNC;
 		if (ddflags & C_ODIRECT)
 			oflags |= O_DIRECT;
+		if (ddflags & C_OFILLORKILL)
+			oflags |= O_FILLORKILL;
 		before_io();
 		out.fd = open(out.name, O_RDWR | oflags, DEFFILEMODE);
 		after_io();
@@ -605,8 +607,10 @@ dd_out(int force)
 			if (nw <= 0) {
 				if (nw == 0)
 					errx(1, "%s: end of device", out.name);
-				if (errno != EINTR)
+				if (errno != EINTR && errno != EAGAIN)
 					err(1, "%s", out.name);
+				if (errno == EAGAIN)
+					usleep(5000);
 				nw = 0;
 			}
 
